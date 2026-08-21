@@ -30,5 +30,5 @@ deve seguir sempre a formatação em baixo
 
 Exemplo de Resumo da Sprint Review para Equipa Delta:
 
-Verifica-se dimunuição do effort devido a periodo de férias. O número  de tasks aumentou e os bugs mantiveram-se.
+Verifica-se diminuição do effort devido a periodo de férias. O número  de tasks aumentou e os bugs mantiveram-se.
 ---
