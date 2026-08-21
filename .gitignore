@@ -1,0 +1,23 @@
+# Dependências
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Artefactos de relatório (snapshots são gerados em runtime)
+reports/*/snapshots/
+
+# Segredos e variáveis de ambiente locais
+.env
+.env.*
+secrets.yaml
+
+# IDE
+.vscode/
+.idea/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
