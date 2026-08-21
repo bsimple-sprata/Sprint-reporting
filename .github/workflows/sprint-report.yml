@@ -22,9 +22,40 @@ permissions:
 jobs:
   generate-reports:
     name: Gerar Relatórios de Sprint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, corp-network, reporting]
 
     steps:
+      - name: Healthcheck – Conectividade ao Azure DevOps
+        env:
+          ADO_PAT: ${{ secrets.ADO_PAT }}
+          ADO_ORGANIZATION: ${{ secrets.ADO_ORGANIZATION }}
+        run: |
+          echo "A verificar conectividade ao Azure DevOps..."
+          if [ -z "$ADO_PAT" ]; then
+            echo "::error::Secret ADO_PAT não está configurado. Configura o secret no repositório (Settings → Secrets → Actions)."
+            exit 1
+          fi
+          if [ -z "$ADO_ORGANIZATION" ]; then
+            echo "::error::Secret ADO_ORGANIZATION não está configurado. Configura o secret no repositório."
+            exit 1
+          fi
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 15 \
+            -u ":${ADO_PAT}" \
+            "https://dev.azure.com/${ADO_ORGANIZATION}/_apis/projects?api-version=7.1") || true
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "Conectividade ao Azure DevOps OK (HTTP $HTTP_STATUS)."
+          elif [ "$HTTP_STATUS" = "401" ] || [ "$HTTP_STATUS" = "403" ]; then
+            echo "::error::Falha de autenticação ao Azure DevOps (HTTP $HTTP_STATUS). Verifica se o ADO_PAT é válido e tem permissões suficientes."
+            exit 1
+          elif [ -z "$HTTP_STATUS" ] || [ "$HTTP_STATUS" = "000" ]; then
+            echo "::error::Sem conectividade ao Azure DevOps. Verifica se a VPN está ativa e o runner tem acesso à rede corporativa."
+            exit 1
+          else
+            echo "::error::Resposta inesperada do Azure DevOps (HTTP $HTTP_STATUS). Verifica a conectividade e as credenciais."
+            exit 1
+          fi
+
       - name: Checkout do repositório
         uses: actions/checkout@v4
         with:
