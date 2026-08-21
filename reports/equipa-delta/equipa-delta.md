@@ -9,6 +9,7 @@
 **Capturado em:** 2026-08-08 16:00 UTC
 
 ### Snapshot do Dashboard
+![Dashboard Equipa Delta](snapshots/equipa-delta_20260808_162921.png)
 
 ### Resumo Executivo
 
