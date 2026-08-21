@@ -23,7 +23,7 @@ Verifica-se dimunuição do effort devido a periodo de férias.
 
 ### Snapshot do Dashboard
 
-![Dashboard Equipa Delta](snapshots\equipa-delta_20260821_162921.png)
+![Dashboard Equipa Delta](snapshots/equipa-delta_20260821_162921.png)
 
 ### Resumo Executivo
 
