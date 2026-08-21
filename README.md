@@ -18,6 +18,8 @@
 10. [Segurança e credenciais](#segurança-e-credenciais)
 11. [Auditoria](#auditoria)
 12. [Decisões técnicas](#decisões-técnicas)
+13. [Self-hosted runner local](#self-hosted-runner-local)
+14. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -305,3 +307,84 @@ Este ficheiro permite auditar quando cada snapshot foi capturado e qual o relat�
 | **OpenAI opcional** para resumos | Permite enriquecer os resumos sem obrigar a uma dependência externa; funciona sem chave via template |
 | **Semanas ímpares** como trigger biweekly | Simples de implementar no cron, sem necessidade de estado externo |
 | **Relatório por equipa** (ficheiro separado) | Isolamento; falha numa equipa não afeta as outras |
+
+---
+
+## Self-hosted runner local
+
+Esta solução está configurada para correr num **self-hosted runner local** — o teu computador liga ao GitHub Actions e executa os workflows com acesso à rede corporativa (via VPN).
+
+### Pré-requisitos da máquina
+
+| Requisito | Versão mínima |
+|---|---|
+| Sistema operativo | Linux (recomendado); Windows 10+ e macOS também suportados |
+| Git | 2.x |
+| Python | 3.12+ |
+| curl | qualquer versão recente |
+| VPN corporativa | ativa antes de iniciar o runner |
+| Acesso ao Azure DevOps | requer PAT válido com permissão Read |
+
+> **Nota Windows/macOS:** os passos de instalação do runner são semelhantes; consulta `docs/LOCAL_RUNNER_SETUP.md` para instruções detalhadas por plataforma.
+
+### Como registar o runner no GitHub
+
+1. Vai ao repositório no GitHub → **Settings → Actions → Runners → New self-hosted runner**.
+2. Segue as instruções apresentadas para o teu sistema operativo (download + configuração).
+3. Durante a configuração, define as labels: `self-hosted,linux,corp-network,reporting`.
+4. Inicia o runner. O workflow irá detetar automaticamente o runner com essas labels.
+
+> Para guia completo passo a passo, consulta [`docs/LOCAL_RUNNER_SETUP.md`](docs/LOCAL_RUNNER_SETUP.md).
+
+### Requisitos operacionais
+
+Para que a execução automática (agendada) funcione:
+
+- ✅ Computador **ligado** no momento agendado (segunda-feira de semana ímpar, 07:30 UTC)
+- ✅ Runner **online** (serviço a correr)
+- ✅ VPN **ativa** com acesso ao Azure DevOps
+
+### Como executar snapshot manual
+
+1. Vai ao separador **Actions** no GitHub.
+2. Seleciona o workflow **"Sprint Report – Geração Automática"**.
+3. Clica em **"Run workflow"**.
+4. Preenche opcionalmente o `sprint_label` e/ou `team`.
+5. Clica em **"Run workflow"** para confirmar.
+
+---
+
+## Troubleshooting
+
+### Runner offline
+
+**Sintoma:** O workflow fica em fila de espera e não inicia.
+
+**Resolução:**
+- Verifica se o serviço do runner está ativo na máquina local:
+  ```bash
+  # Linux (serviço systemd)
+  sudo systemctl status actions.runner.<org>-<repo>.<runner-name>.service
+  # ou, se não configurado como serviço:
+  cd ~/actions-runner && ./run.sh
+  ```
+- Confirma que o runner aparece como **Online** em Settings → Actions → Runners.
+
+### VPN desligada
+
+**Sintoma:** O healthcheck falha com erro `HTTP 000` ou timeout.
+
+**Resolução:**
+- Liga a VPN corporativa antes de iniciar o runner.
+- Verifica conectividade: `curl -u ":$ADO_PAT" "https://dev.azure.com/$ADO_ORGANIZATION/_apis/projects?api-version=7.1"`
+- Se a resposta for `HTTP 200`, a VPN e as credenciais estão corretas.
+
+### Falha de autenticação `ADO_PAT`
+
+**Sintoma:** O healthcheck falha com erro `HTTP 401` ou `HTTP 403`.
+
+**Resolução:**
+- Verifica se o secret `ADO_PAT` está corretamente configurado em Settings → Secrets → Actions.
+- Confirma que o PAT não expirou (Azure DevOps → User Settings → Personal Access Tokens).
+- Garante que o PAT tem permissão **Read** em Dashboards e Work Items.
+- Após atualizar o secret, lança novo run manual para confirmar.
