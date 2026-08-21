@@ -1,8 +1,8 @@
 """
 summarize.py
 Gera um resumo executivo (5-10 linhas) para um dashboard Azure DevOps,
-opcionalmente usando a API do Azure DevOps para recolher métricas e
-um modelo de linguagem para gerar texto (OpenAI/Azure OpenAI).
+usando a API do Azure DevOps para recolher métricas e um modelo de
+linguagem local via Ollama para gerar texto.
 """
 
 import logging
@@ -12,6 +12,10 @@ from datetime import datetime
 import requests
 
 logger = logging.getLogger(__name__)
+
+# Configuração do Ollama – pode ser sobreposta por variáveis de ambiente
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 
 
 def fetch_ado_metrics(team: dict, ado_pat: str, organization: str, project: str) -> dict:
@@ -60,17 +64,13 @@ def generate_executive_summary(team: dict, metrics: dict, snapshot_path: str) ->
     """
     Gera um resumo executivo de 5 a 10 linhas com base nas métricas recolhidas.
 
-    Se a variável de ambiente OPENAI_API_KEY estiver definida, usa o modelo
-    para gerar texto mais rico. Caso contrário, produz um resumo baseado em template.
+    Se o serviço Ollama estiver disponível, usa o modelo configurado para gerar
+    texto mais rico. Caso contrário, produz um resumo baseado em template.
     """
     team_name = team["name"]
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    openai_key = os.getenv("OPENAI_API_KEY", "")
 
-    if openai_key:
-        return _generate_with_llm(team_name, metrics, now, openai_key)
-
-    return _generate_from_template(team_name, metrics, now, snapshot_path)
+    return _generate_with_ollama(team_name, metrics, now, snapshot_path)
 
 
 def _generate_from_template(team_name: str, metrics: dict, timestamp: str, snapshot_path: str) -> str:
@@ -85,24 +85,33 @@ def _generate_from_template(team_name: str, metrics: dict, timestamp: str, snaps
     )
 
 
-def _generate_with_llm(team_name: str, metrics: dict, timestamp: str, api_key: str) -> str:
-    """Usa OpenAI Chat Completions para gerar o resumo."""
+def _generate_with_ollama(team_name: str, metrics: dict, timestamp: str, snapshot_path: str) -> str:
+    """Usa o Ollama local para gerar o resumo via API de chat."""
+    base_url = OLLAMA_BASE_URL.rstrip("/")
+    model = OLLAMA_MODEL
+    prompt = (
+        f"És um assistente de gestão ágil. Com base nas seguintes métricas da "
+        f"equipa '{team_name}' recolhidas em {timestamp}:\n"
+        f"{metrics}\n\n"
+        f"Escreve um resumo executivo em português europeu de 5 a 10 linhas, "
+        f"adequado para uma sprint review, destacando estado geral, riscos e recomendações."
+    )
     try:
-        import openai
-        openai.api_key = api_key
-        prompt = (
-            f"És um assistente de gestão ágil. Com base nas seguintes métricas da "
-            f"equipa '{team_name}' recolhidas em {timestamp}:\n"
-            f"{metrics}\n\n"
-            f"Escreve um resumo executivo em português europeu de 5 a 10 linhas, "
-            f"adequado para uma sprint review, destacando estado geral, riscos e recomendações."
+        resp = requests.post(
+            f"{base_url}/api/generate",
+            json={"model": model, "prompt": prompt, "stream": False},
+            timeout=120,
         )
-        response = openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
-        )
-        return response.choices[0].message.content.strip()
+        resp.raise_for_status()
+        data = resp.json()
+        text = data.get("response", "").strip()
+        if text:
+            logger.info("[%s] Resumo gerado via Ollama (modelo: %s).", team_name, model)
+            return text
+        logger.warning("[%s] Ollama devolveu resposta vazia; a usar template.", team_name)
     except Exception as exc:
-        logger.warning("LLM indisponível, usando template: %s", exc)
-        return _generate_from_template(team_name, metrics, timestamp, "")
+        logger.warning(
+            "[%s] Ollama indisponível (base_url=%s, model=%s): %s – a usar template.",
+            team_name, base_url, model, exc,
+        )
+    return _generate_from_template(team_name, metrics, timestamp, snapshot_path)

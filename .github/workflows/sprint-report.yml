@@ -25,19 +25,35 @@ jobs:
     runs-on: [self-hosted, windows, corp-network, reporting]
 
     steps:
+      - name: Healthcheck – Serviço Ollama
+        shell: pwsh
+        run: |
+          Write-Host "A verificar conectividade ao serviço Ollama local..."
+          $ollamaUrl = if ($env:OLLAMA_BASE_URL) { $env:OLLAMA_BASE_URL.TrimEnd('/') } else { "http://127.0.0.1:11434" }
+          try {
+            $response = Invoke-WebRequest `
+              -Uri "$ollamaUrl/" `
+              -TimeoutSec 10 `
+              -UseBasicParsing `
+              -ErrorAction Stop
+            Write-Host "Ollama disponível em $ollamaUrl (HTTP $($response.StatusCode))."
+          } catch {
+            Write-Host "::warning::Serviço Ollama não está acessível em $ollamaUrl. O pipeline continuará mas os resumos serão gerados por template. Verifica se o Ollama está instalado e em execução na máquina runner (porta 11434)."
+          }
+
       - name: Healthcheck – Conectividade ao Azure DevOps
         env:
           ADO_PAT: ${{ secrets.ADO_PAT }}
           ADO_ORGANIZATION: ${{ secrets.ADO_ORGANIZATION }}
         shell: pwsh
         run: |
-          Write-Output "A verificar conectividade ao Azure DevOps..."
+          Write-Host "A verificar conectividade ao Azure DevOps..."
           if (-not $env:ADO_PAT) {
-            Write-Output "::error::Secret ADO_PAT não está configurado. Configura o secret no repositório (Settings → Secrets → Actions)."
+            Write-Host "::error::Secret ADO_PAT não está configurado. Configura o secret no repositório (Settings → Secrets → Actions)."
             exit 1
           }
           if (-not $env:ADO_ORGANIZATION) {
-            Write-Output "::error::Secret ADO_ORGANIZATION não está configurado. Configura o secret no repositório."
+            Write-Host "::error::Secret ADO_ORGANIZATION não está configurado. Configura o secret no repositório."
             exit 1
           }
           try {
@@ -52,17 +68,17 @@ jobs:
           } catch {
             $httpStatus = $_.Exception.Response.StatusCode.value__
             if (-not $httpStatus) {
-              Write-Output "::error::Sem conectividade ao Azure DevOps. Verifica se a VPN está ativa e o runner tem acesso à rede corporativa."
+              Write-Host "::error::Sem conectividade ao Azure DevOps. Verifica se a VPN está ativa e o runner tem acesso à rede corporativa."
               exit 1
             }
           }
           if ($httpStatus -eq 200) {
-            Write-Output "Conectividade ao Azure DevOps OK (HTTP $httpStatus)."
+            Write-Host "Conectividade ao Azure DevOps OK (HTTP $httpStatus)."
           } elseif ($httpStatus -eq 401 -or $httpStatus -eq 403) {
-            Write-Output "::error::Falha de autenticação ao Azure DevOps (HTTP $httpStatus). Verifica se o ADO_PAT é válido e tem permissões suficientes."
+            Write-Host "::error::Falha de autenticação ao Azure DevOps (HTTP $httpStatus). Verifica se o ADO_PAT é válido e tem permissões suficientes."
             exit 1
           } else {
-            Write-Output "::error::Resposta inesperada do Azure DevOps (HTTP $httpStatus). Verifica a conectividade e as credenciais."
+            Write-Host "::error::Resposta inesperada do Azure DevOps (HTTP $httpStatus). Verifica a conectividade e as credenciais."
             exit 1
           }
 
@@ -105,7 +121,8 @@ jobs:
           ADO_PAT: ${{ secrets.ADO_PAT }}
           ADO_ORGANIZATION: ${{ secrets.ADO_ORGANIZATION }}
           ADO_PROJECT: ${{ secrets.ADO_PROJECT }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OLLAMA_BASE_URL: ${{ vars.OLLAMA_BASE_URL }}
+          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL }}
           INPUT_SPRINT_LABEL: ${{ github.event.inputs.sprint_label }}
           INPUT_TEAM: ${{ github.event.inputs.team }}
         shell: pwsh
