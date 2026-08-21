@@ -70,10 +70,14 @@ def main():
         logger.error("A variável de ambiente ADO_PAT não está definida.")
         sys.exit(1)
 
-    organization = global_cfg.get("organization", os.environ.get("ADO_ORGANIZATION", ""))
+    ado_base_url = os.environ.get("ADO_BASE_URL", "").rstrip("/")
     project = global_cfg.get("project", os.environ.get("ADO_PROJECT", ""))
     report_output_dir = global_cfg.get("report_output_dir", "reports")
     sprint_label = args.sprint_label or get_sprint_label()
+
+    if not ado_base_url:
+        logger.error("A variável de ambiente ADO_BASE_URL não está definida.")
+        sys.exit(1)
 
     logger.info("Sprint label: %s", sprint_label)
 
@@ -101,7 +105,7 @@ def main():
             continue
 
         try:
-            metrics = fetch_ado_metrics(team, ado_pat, organization, project)
+            metrics = fetch_ado_metrics(team, ado_pat, project)
         except Exception as exc:
             logger.warning("[%s] Erro ao recolher métricas: %s", team_name, exc)
             metrics = {}

@@ -44,7 +44,7 @@ jobs:
       - name: Healthcheck – Conectividade ao Azure DevOps
         env:
           ADO_PAT: ${{ secrets.ADO_PAT }}
-          ADO_ORGANIZATION: ${{ secrets.ADO_ORGANIZATION }}
+          ADO_BASE_URL: ${{ secrets.ADO_BASE_URL }}
         shell: powershell
         run: |
           Write-Host "A verificar conectividade ao Azure DevOps..."
@@ -52,14 +52,15 @@ jobs:
             Write-Host "::error::Secret ADO_PAT não está configurado. Configura o secret no repositório (Settings → Secrets → Actions)."
             exit 1
           }
-          if (-not $env:ADO_ORGANIZATION) {
-            Write-Host "::error::Secret ADO_ORGANIZATION não está configurado. Configura o secret no repositório."
+          if (-not $env:ADO_BASE_URL) {
+            Write-Host "::error::Secret ADO_BASE_URL não está configurado. Configura o secret no repositório."
             exit 1
           }
           try {
             $base64Pat = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$env:ADO_PAT"))
+            $adoUrl = $env:ADO_BASE_URL.TrimEnd('/') + "/_apis/projects?api-version=7.1"
             $response = Invoke-WebRequest `
-              -Uri "https://dev.azure.com/$env:ADO_ORGANIZATION/_apis/projects?api-version=7.1" `
+              -Uri $adoUrl `
               -Headers @{ Authorization = "Basic $base64Pat" } `
               -TimeoutSec 15 `
               -UseBasicParsing `
@@ -119,7 +120,7 @@ jobs:
         if: steps.check_week.outputs.run == 'true' || github.event_name == 'workflow_dispatch'
         env:
           ADO_PAT: ${{ secrets.ADO_PAT }}
-          ADO_ORGANIZATION: ${{ secrets.ADO_ORGANIZATION }}
+          ADO_BASE_URL: ${{ secrets.ADO_BASE_URL }}
           ADO_PROJECT: ${{ secrets.ADO_PROJECT }}
           OLLAMA_BASE_URL: ${{ vars.OLLAMA_BASE_URL }}
           OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL }}

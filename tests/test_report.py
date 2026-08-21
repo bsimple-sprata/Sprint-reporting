@@ -12,7 +12,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from summarize import _generate_from_template
+from summarize import _generate_from_template, fetch_ado_metrics
 from publish import publish_report
 
 
@@ -78,3 +78,28 @@ def test_audit_log_created(tmp_path, monkeypatch):
     content = Path(audit_path).read_text(encoding="utf-8")
     assert "Equipa Test" in content
     assert "2024-W01" in content
+
+
+def test_fetch_ado_metrics_uses_ado_base_url(monkeypatch):
+    monkeypatch.setenv("ADO_BASE_URL", "https://cleopatra/BSimpleCollection/")
+
+    class DummyResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"workItems": [{"id": 1}]}
+
+    def fake_post(url, json, auth, timeout):
+        assert url == "https://cleopatra/BSimpleCollection/bunity/_apis/wit/wiql?api-version=7.0"
+        return DummyResponse()
+
+    monkeypatch.setattr("summarize.requests.post", fake_post)
+    metrics = fetch_ado_metrics(TEAM, "pat", "bunity")
+    assert metrics["total_work_items"] == 1
+
+
+def test_fetch_ado_metrics_requires_ado_base_url(monkeypatch):
+    monkeypatch.delenv("ADO_BASE_URL", raising=False)
+    with pytest.raises(ValueError, match="ADO_BASE_URL não está definido."):
+        fetch_ado_metrics(TEAM, "pat", "bunity")

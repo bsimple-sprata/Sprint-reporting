@@ -22,7 +22,7 @@ teams:
 
 # Configuração global
 global:
-  organization: "{organization}"
+  # organization removida: usar secret ADO_BASE_URL para URL base completa do Azure DevOps Server
   project: "{project}"
   report_output_dir: "reports"
   summary_lines_min: 5
