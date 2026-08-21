@@ -1,0 +1,93 @@
+name: Sprint Report – Geração Automática
+
+on:
+  # Executar de 2 em 2 semanas às 07:30 UTC (segunda-feira da semana ímpar)
+  schedule:
+    - cron: "30 7 * * 1"   # Todas as segundas-feiras; filtrado por semana no script
+  # Permitir execução manual
+  workflow_dispatch:
+    inputs:
+      sprint_label:
+        description: "Identificador da sprint (ex: 2024-W01). Se vazio, gerado automaticamente."
+        required: false
+        default: ""
+      team:
+        description: "Nome exato da equipa a processar. Se vazio, processa todas."
+        required: false
+        default: ""
+
+permissions:
+  contents: write   # Para fazer commit dos relatórios gerados
+
+jobs:
+  generate-reports:
+    name: Gerar Relatórios de Sprint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências Python
+        run: pip install -r requirements.txt
+
+      - name: Instalar browsers Playwright
+        run: playwright install chromium --with-deps
+
+      - name: Executar testes
+        run: pytest tests/ -v
+
+      - name: Verificar se é semana de execução
+        id: check_week
+        run: |
+          WEEK=$(python -c "from datetime import datetime, timezone; d=datetime.now(timezone.utc); print(d.isocalendar()[1])")
+          echo "week=$WEEK" >> "$GITHUB_OUTPUT"
+          if [ $(( WEEK % 2 )) -eq 1 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Executar geração de relatórios
+        if: steps.check_week.outputs.run == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          ADO_PAT: ${{ secrets.ADO_PAT }}
+          ADO_ORGANIZATION: ${{ secrets.ADO_ORGANIZATION }}
+          ADO_PROJECT: ${{ secrets.ADO_PROJECT }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          INPUT_SPRINT_LABEL: ${{ github.event.inputs.sprint_label }}
+          INPUT_TEAM: ${{ github.event.inputs.team }}
+        run: |
+          ARGS="--config config/config.yaml"
+          if [ -n "$INPUT_SPRINT_LABEL" ]; then
+            ARGS="$ARGS --sprint-label $INPUT_SPRINT_LABEL"
+          fi
+          if [ -n "$INPUT_TEAM" ]; then
+            ARGS="$ARGS --team $INPUT_TEAM"
+          fi
+          python src/run_report.py $ARGS
+
+      - name: Confirmar e publicar relatórios
+        if: steps.check_week.outputs.run == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add reports/
+          git diff --cached --quiet || git commit -m "chore(reports): relatório sprint $(date -u +%Y-W%V)"
+          git push
+
+      - name: Publicar artefactos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sprint-reports-${{ github.run_id }}
+          path: reports/
+          retention-days: 90
