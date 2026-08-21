@@ -90,6 +90,7 @@ jobs:
 
       - name: Configurar Python
         uses: actions/setup-python@v5
+        continue-on-error: true
         with:
           python-version: "3.13"
           cache: pip
