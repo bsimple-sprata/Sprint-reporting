@@ -56,6 +56,7 @@ Azure DevOps
 | Recolha de métricas | `src/summarize.py` | Azure DevOps REST API |
 | Geração de resumo | `src/summarize.py` | LLM local via Ollama (fallback: template) |
 | Publicação cumulativa | `src/publish.py` | Markdown por equipa + audit log |
+| Regras obrigatórias de report | `src/report_guidelines.py` | Validação automática das guidelines antes de publicar |
 | Orquestrador | `src/run_report.py` | CLI principal |
 | Automação | `.github/workflows/sprint-report.yml` | Agendamento GitHub Actions |
 
@@ -233,7 +234,7 @@ pytest tests/ -v
         ├─ para cada equipa em config.yaml:
         │     ├─ snapshot.py → captura PNG do dashboard
         │     ├─ summarize.py → recolhe métricas + gera resumo
-        │     └─ publish.py → atualiza Markdown cumulativo + audit.log
+        │     └─ publish.py → valida guidelines + atualiza Markdown cumulativo + audit.log
         │
         ├─ git commit + git push dos relatórios
         │
@@ -254,6 +255,12 @@ A cada ciclo de 2 semanas, é acrescentada uma nova secção ao ficheiro (nunca 
 - Timestamp de captura
 - Imagem do snapshot (link relativo)
 - Resumo executivo (5–10 linhas)
+
+Antes de gravar/publicar, o pipeline valida automaticamente as regras definidas em `docs/docs/reporting-guidelines.md` e falha com erro explícito quando:
+
+- existir um link de imagem com `\` (obrigatório usar `/`);
+- uma imagem referenciada não existir em `reports/<equipa>/snapshots/`;
+- a estrutura mínima obrigatória do report não for respeitada.
 
 **Exemplo de estrutura do relatório:**
 
