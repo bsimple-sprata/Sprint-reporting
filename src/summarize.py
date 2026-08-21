@@ -18,7 +18,7 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 
 
-def fetch_ado_metrics(team: dict, ado_pat: str, organization: str, project: str) -> dict:
+def fetch_ado_metrics(team: dict, ado_pat: str, project: str) -> dict:
     """
     Recolhe métricas básicas do Azure DevOps via REST API para a equipa.
 
@@ -28,7 +28,10 @@ def fetch_ado_metrics(team: dict, ado_pat: str, organization: str, project: str)
     auth = ("", ado_pat)
 
     team_name = team["name"]
-    base = f"https://dev.azure.com/{organization}/{project}"
+    ado_base_url = os.getenv("ADO_BASE_URL", "").rstrip("/")
+    if not ado_base_url:
+        raise ValueError("ADO_BASE_URL não está definido.")
+    base = f"{ado_base_url}/{project}"
 
     # Sanitize project name: allow only alphanumeric, spaces, hyphens, underscores and dots
     import re
