@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Healthcheck – Serviço Ollama
-        shell: pwsh
+        shell: powershell
         run: |
           Write-Host "A verificar conectividade ao serviço Ollama local..."
           $ollamaUrl = if ($env:OLLAMA_BASE_URL) { $env:OLLAMA_BASE_URL.TrimEnd('/') } else { "http://127.0.0.1:11434" }
@@ -45,7 +45,7 @@ jobs:
         env:
           ADO_PAT: ${{ secrets.ADO_PAT }}
           ADO_ORGANIZATION: ${{ secrets.ADO_ORGANIZATION }}
-        shell: pwsh
+        shell: powershell
         run: |
           Write-Host "A verificar conectividade ao Azure DevOps..."
           if (-not $env:ADO_PAT) {
@@ -97,7 +97,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Instalar browsers Playwright
-        shell: pwsh
+        shell: powershell
         run: playwright install chromium
 
       - name: Executar testes
@@ -105,7 +105,7 @@ jobs:
 
       - name: Verificar se é semana de execução
         id: check_week
-        shell: pwsh
+        shell: powershell
         run: |
           $week = python -c "from datetime import datetime, timezone; d=datetime.now(timezone.utc); print(d.isocalendar()[1])"
           echo "week=$week" >> $env:GITHUB_OUTPUT
@@ -125,7 +125,7 @@ jobs:
           OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL }}
           INPUT_SPRINT_LABEL: ${{ github.event.inputs.sprint_label }}
           INPUT_TEAM: ${{ github.event.inputs.team }}
-        shell: pwsh
+        shell: powershell
         run: |
           $scriptArgs = @("--config", "config/config.yaml")
           if ($env:INPUT_SPRINT_LABEL) {
@@ -138,7 +138,7 @@ jobs:
 
       - name: Confirmar e publicar relatórios
         if: steps.check_week.outputs.run == 'true' || github.event_name == 'workflow_dispatch'
-        shell: pwsh
+        shell: powershell
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -152,5 +152,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sprint-reports-${{ github.run_id }}
-          path: reports/
+          path: reports/**
+          if-no-files-found: warn
           retention-days: 90
