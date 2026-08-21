@@ -7,7 +7,7 @@ venv/
 env/
 
 # Artefactos de relatório (snapshots são gerados em runtime)
-reports/*/snapshots/
+reports/**/snapshots/*.png  # Permite PNGs em snapshots
 
 # Segredos e variáveis de ambiente locais
 .env
