@@ -8,6 +8,12 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from report_guidelines import (
+    build_report_section,
+    normalize_snapshot_markdown_path,
+    validate_report_markdown,
+)
+
 logger = logging.getLogger(__name__)
 
 AUDIT_LOG_DEFAULT = "reports/audit.log"
@@ -49,25 +55,13 @@ def publish_report(
         )
         report_path.write_text(header, encoding="utf-8")
 
-    # Caminho relativo da imagem para o Markdown
-    try:
-        rel_image = os.path.relpath(snapshot_path, str(report_dir))
-    except ValueError:
-        # Windows: relpath pode falhar entre drives
-        rel_image = snapshot_path
+    rel_image = normalize_snapshot_markdown_path(snapshot_path, report_dir)
+    new_section = build_report_section(team["name"], sprint_label, now, summary, rel_image)
 
-    new_section = (
-        f"## Sprint {sprint_label}\n\n"
-        f"**Capturado em:** {now}\n\n"
-        f"### Snapshot do Dashboard\n\n"
-        f"![Dashboard {team['name']}]({rel_image})\n\n"
-        f"### Resumo Executivo\n\n"
-        f"{summary}\n\n"
-        f"---\n\n"
-    )
-
-    with report_path.open("a", encoding="utf-8") as fh:
-        fh.write(new_section)
+    current_content = report_path.read_text(encoding="utf-8")
+    updated_content = f"{current_content}{new_section}"
+    validate_report_markdown(updated_content, report_path)
+    report_path.write_text(updated_content, encoding="utf-8")
 
     logger.info("Relatório atualizado: %s", report_path)
     _append_audit(team["name"], sprint_label, snapshot_path, str(report_path), now)
