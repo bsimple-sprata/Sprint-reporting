@@ -14,3 +14,21 @@
 
 # critérios para resumo executivo
 - Deve existir em todas as secções de sprint
+---
+### Template:
+
+## Sprint 290
+
+**Capturado em:** 2026-00-00 00:00 UTC
+
+### Snapshot do Dashboard
+
+deve seguir sempre a formatação em baixo
+![Dashboard Equipa xx](snapshots/***_20260808_162921.png)
+
+### Resumo Executivo
+
+Exemplo de Resumo da Sprint Review para Equipa Delta:
+
+Verifica-se dimunuição do effort devido a periodo de férias. O número  de tasks aumentou e os bugs mantiveram-se.
+---
