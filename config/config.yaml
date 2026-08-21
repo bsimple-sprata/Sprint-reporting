@@ -2,53 +2,23 @@
 # Cada entrada define uma equipa, o seu dashboard e as preferências de snapshot
 
 teams:
-  - name: "Equipa Alpha"
-    dashboard_url: "https://dev.azure.com/{organization}/{project}/_dashboards/dashboard/{dashboard_id_alpha}"
-    snapshot_time: "08:00"
-    timezone: "Europe/Lisbon"
-    frequency: "biweekly"
-    publish_to: "reports/equipa-alpha"
-    notes: "Dashboard principal de acompanhamento da Equipa Alpha"
-
-  - name: "Equipa Beta"
-    dashboard_url: "https://dev.azure.com/{organization}/{project}/_dashboards/dashboard/{dashboard_id_beta}"
-    snapshot_time: "08:15"
-    timezone: "Europe/Lisbon"
-    frequency: "biweekly"
-    publish_to: "reports/equipa-beta"
-    notes: "Dashboard principal de acompanhamento da Equipa Beta"
-
-  - name: "Equipa Gamma"
-    dashboard_url: "https://dev.azure.com/{organization}/{project}/_dashboards/dashboard/{dashboard_id_gamma}"
-    snapshot_time: "08:30"
-    timezone: "Europe/Lisbon"
-    frequency: "biweekly"
-    publish_to: "reports/equipa-gamma"
-    notes: "Dashboard principal de acompanhamento da Equipa Gamma"
+ # - name: "Equipa Alpha"
+ #  dashboard_url: "https://dev.azure.com/{organization}/{project}/_dashboards/dashboard/{dashboard_id_alpha}"
+ # snapshot_time: "08:00"
+ # timezone: "Europe/Lisbon"
+ # frequency: "biweekly"
+ # publish_to: "reports/equipa-alpha"
+ # notes: "Dashboard principal de acompanhamento da Equipa Alpha"
 
   - name: "Equipa Delta"
-    dashboard_url: "https://dev.azure.com/{organization}/{project}/_dashboards/dashboard/{dashboard_id_delta}"
+    dashboard_url: "https://cleopatra/BSimpleCollection/bunity/_dashboards/dashboard/de575235-0ea9-4503-ae57-a2f9d5afe9df"
     snapshot_time: "08:45"
     timezone: "Europe/Lisbon"
     frequency: "biweekly"
     publish_to: "reports/equipa-delta"
     notes: "Dashboard principal de acompanhamento da Equipa Delta"
 
-  - name: "Equipa Epsilon"
-    dashboard_url: "https://dev.azure.com/{organization}/{project}/_dashboards/dashboard/{dashboard_id_epsilon}"
-    snapshot_time: "09:00"
-    timezone: "Europe/Lisbon"
-    frequency: "biweekly"
-    publish_to: "reports/equipa-epsilon"
-    notes: "Dashboard principal de acompanhamento da Equipa Epsilon"
 
-  - name: "Equipa Zeta"
-    dashboard_url: "https://dev.azure.com/{organization}/{project}/_dashboards/dashboard/{dashboard_id_zeta}"
-    snapshot_time: "09:15"
-    timezone: "Europe/Lisbon"
-    frequency: "biweekly"
-    publish_to: "reports/equipa-zeta"
-    notes: "Dashboard principal de acompanhamento da Equipa Zeta"
 
 # Configuração global
 global:
