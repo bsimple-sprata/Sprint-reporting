@@ -11,12 +11,13 @@
 2. [Instalação do self-hosted runner](#2-instalação-do-self-hosted-runner)
 3. [Configuração como serviço (auto-start)](#3-configuração-como-serviço-auto-start)
 4. [Configuração de labels recomendadas](#4-configuração-de-labels-recomendadas)
-5. [Configuração de secrets no GitHub](#5-configuração-de-secrets-no-github)
-6. [Teste de conectividade à VPN e Azure DevOps](#6-teste-de-conectividade-à-vpn-e-azure-devops)
-7. [Primeiro run manual](#7-primeiro-run-manual)
-8. [Validação dos outputs em `reports/`](#8-validação-dos-outputs-em-reports)
-9. [Problemas comuns e resolução rápida](#9-problemas-comuns-e-resolução-rápida)
-10. [Checklist operacional diário](#10-checklist-operacional-diário)
+5. [Instalação e configuração do Ollama](#5-instalação-e-configuração-do-ollama)
+6. [Configuração de secrets e variables no GitHub](#6-configuração-de-secrets-e-variables-no-github)
+7. [Teste de conectividade à VPN e Azure DevOps](#7-teste-de-conectividade-à-vpn-e-azure-devops)
+8. [Primeiro run manual](#8-primeiro-run-manual)
+9. [Validação dos outputs em `reports/`](#9-validação-dos-outputs-em-reports)
+10. [Problemas comuns e resolução rápida](#10-problemas-comuns-e-resolução-rápida)
+11. [Checklist operacional diário](#11-checklist-operacional-diário)
 
 ---
 
@@ -30,6 +31,7 @@ Confirma que tens instalado na máquina:
 | Python | 3.13+ | `python --version` |
 | PowerShell | 5.1+ (incluso no Windows 10/11) | `$PSVersionTable.PSVersion` |
 | VPN corporativa | — | acesso a `dev.azure.com` |
+| Ollama | última versão | `ollama --version` |
 
 Adicionalmente:
 - Conta GitHub com acesso de administrador ao repositório `bsimple-sprata/Sprint-reporting`.
@@ -147,19 +149,135 @@ runs-on: [self-hosted, windows, corp-network, reporting]
 
 ---
 
-## 5. Configuração de secrets no GitHub
+## 5. Instalação e configuração do Ollama
 
-Os secrets são usados pelo workflow para autenticar no Azure DevOps e, opcionalmente, no OpenAI.
+O projeto usa o **Ollama** para gerar resumos executivos com um modelo de linguagem local, sem necessidade de chaves de API externas nem conectividade à internet para inferência.
 
-1. Vai ao repositório → **Settings → Secrets and variables → Actions → New repository secret**.
-2. Cria os seguintes secrets:
+### 5.1 Instalar o Ollama no Windows
+
+1. Acede a [https://ollama.com/download](https://ollama.com/download).
+2. Clica em **Download for Windows** e executa o instalador `.exe`.
+3. Segue o assistente de instalação (sem configuração especial necessária).
+4. Após a instalação, o Ollama fica disponível em PowerShell:
+
+```powershell
+ollama --version
+```
+
+### 5.2 Arrancar o serviço Ollama
+
+O instalador do Ollama no Windows regista um serviço de sistema que inicia automaticamente. Verifica se está ativo:
+
+```powershell
+# Verificar se o serviço está a correr
+Get-Service -Name "Ollama" -ErrorAction SilentlyContinue
+
+# Alternativa: verificar se o endpoint responde
+Invoke-WebRequest -Uri "http://127.0.0.1:11434/" -UseBasicParsing | Select-Object StatusCode
+```
+
+Resultado esperado: `StatusCode: 200`
+
+Se o serviço não estiver ativo, inicia-o manualmente:
+
+```powershell
+# Iniciar como processo em segundo plano
+Start-Process "ollama" -ArgumentList "serve" -WindowStyle Hidden
+
+# Aguardar uns segundos e testar novamente
+Start-Sleep -Seconds 3
+Invoke-WebRequest -Uri "http://127.0.0.1:11434/" -UseBasicParsing | Select-Object StatusCode
+```
+
+### 5.3 Descarregar o modelo
+
+Descarrega o modelo que queres usar (o valor por omissão é `llama3.2`):
+
+```powershell
+# Descarregar o modelo (pode demorar alguns minutos dependendo do tamanho)
+ollama pull llama3.2
+```
+
+Outros modelos recomendados para hardware com menos recursos:
+
+```powershell
+ollama pull llama3.2:1b   # Versão mais leve – 1B parâmetros
+ollama pull phi3          # Microsoft Phi-3 – boa relação desempenho/tamanho
+```
+
+Verificar modelos disponíveis localmente:
+
+```powershell
+ollama list
+```
+
+### 5.4 Teste de inferência simples
+
+Confirma que o modelo responde corretamente antes de executar o workflow:
+
+```powershell
+# Teste via CLI
+ollama run llama3.2 "Responde em português: qual é a capital de Portugal?"
+```
+
+Ou via API HTTP (sem necessidade de sair do PowerShell):
+
+```powershell
+$body = @{
+    model  = "llama3.2"
+    prompt = "Responde em português: qual é a capital de Portugal?"
+    stream = $false
+} | ConvertTo-Json
+
+$response = Invoke-WebRequest `
+  -Uri "http://127.0.0.1:11434/api/generate" `
+  -Method POST `
+  -Body $body `
+  -ContentType "application/json" `
+  -UseBasicParsing
+
+($response.Content | ConvertFrom-Json).response
+```
+
+Deves obter uma resposta em texto com a resposta do modelo.
+
+### 5.5 Configurar o modelo no workflow
+
+Por omissão, o código usa `llama3.2` e o endpoint `http://127.0.0.1:11434`. Para usar outro modelo ou URL, define as **Variables** no GitHub (Settings → Secrets and variables → Actions → **Variables**):
+
+| Variable | Valor exemplo | Descrição |
+|---|---|---|
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | URL base do serviço Ollama |
+| `OLLAMA_MODEL` | `llama3.2` | Modelo a usar para gerar resumos |
+
+> As Variables são valores não-sensíveis visíveis nos logs; usa-as para configuração, não para credenciais.
+
+---
+
+## 6. Configuração de secrets e variables no GitHub
+
+1. Vai ao repositório → **Settings → Secrets and variables → Actions**.
+
+### Secrets (dados sensíveis)
+
+Cria os seguintes secrets em **New repository secret**:
 
 | Secret | Descrição | Obrigatório |
 |---|---|---|
 | `ADO_PAT` | Personal Access Token do Azure DevOps | ✅ Sim |
 | `ADO_ORGANIZATION` | Nome da organização Azure DevOps (ex: `minha-org`) | ✅ Sim |
 | `ADO_PROJECT` | Nome do projeto Azure DevOps | ✅ Sim |
-| `OPENAI_API_KEY` | Chave da API OpenAI para resumos com LLM | ❌ Opcional |
+
+### Variables (configuração não sensível)
+
+Em **Variables → New repository variable**, cria opcionalmente:
+
+| Variable | Valor por omissão | Descrição |
+|---|---|---|
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | URL base do Ollama na máquina runner |
+| `OLLAMA_MODEL` | `llama3.2` | Modelo Ollama para geração de resumos |
+
+> Se não definires estas variables, o código usa os valores por omissão listados acima.
 
 > **Como criar o PAT no Azure DevOps:**
 > 1. Acede ao Azure DevOps → clica no teu avatar → **Personal Access Tokens**.
@@ -170,11 +288,11 @@ Os secrets são usados pelo workflow para autenticar no Azure DevOps e, opcional
 
 ---
 
-## 6. Teste de conectividade à VPN e Azure DevOps
+## 7. Teste de conectividade à VPN e Azure DevOps
 
 Antes do primeiro run, confirma que a VPN está ativa e as credenciais estão corretas.
 
-### 6.1 Verificar conectividade básica
+### 7.1 Verificar conectividade básica
 
 ```powershell
 $base64Pat = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$env:ADO_PAT"))
@@ -194,21 +312,23 @@ Resultado esperado: `200`
 | `403` | PAT sem permissões suficientes |
 | erro de ligação | Sem conectividade – VPN desligada ou host inacessível |
 
-### 6.2 Definir variáveis de ambiente para teste local
+### 7.2 Definir variáveis de ambiente para teste local
 
 ```powershell
 $env:ADO_PAT = "<o_teu_pat>"
 $env:ADO_ORGANIZATION = "<nome_org>"
 $env:ADO_PROJECT = "<nome_projeto>"
+$env:OLLAMA_BASE_URL = "http://127.0.0.1:11434"
+$env:OLLAMA_MODEL = "llama3.2"
 ```
 
 > Nunca coloques estes valores em ficheiros que sejam committed. Usa sempre variáveis de ambiente ou o ficheiro `.env` (que está no `.gitignore`).
 
 ---
 
-## 7. Primeiro run manual
+## 8. Primeiro run manual
 
-Com o runner online e os secrets configurados:
+Com o runner online, o Ollama ativo e os secrets configurados:
 
 1. Vai ao repositório no GitHub → separador **Actions**.
 2. Seleciona o workflow **"Sprint Report – Geração Automática"** na barra lateral esquerda.
@@ -221,7 +341,7 @@ Com o runner online e os secrets configurados:
 
 ---
 
-## 8. Validação dos outputs em `reports/`
+## 9. Validação dos outputs em `reports/`
 
 Após o run com sucesso, verifica os artefactos gerados:
 
@@ -250,7 +370,7 @@ Os relatórios também ficam disponíveis como **artefactos** no separador Actio
 
 ---
 
-## 9. Problemas comuns e resolução rápida
+## 10. Problemas comuns e resolução rápida
 
 ### Runner não aparece online no GitHub
 
@@ -269,7 +389,49 @@ Os relatórios também ficam disponíveis como **artefactos** no separador Actio
 - O runner pode estar offline ou as labels não correspondem.
 - Confirma em **Settings → Actions → Runners** que o runner tem estado **Online** e as labels corretas: `self-hosted`, `windows`, `corp-network`, `reporting`.
 
-### Healthcheck falha – sem conectividade
+### Healthcheck Ollama falha – porta 11434 inacessível
+
+**Sintoma:** O passo "Healthcheck – Serviço Ollama" falha com erro de ligação.
+
+**Resolução:**
+- Confirma que o Ollama está instalado: `ollama --version`
+- Inicia o serviço manualmente:
+  ```powershell
+  Start-Process "ollama" -ArgumentList "serve" -WindowStyle Hidden
+  Start-Sleep -Seconds 3
+  Invoke-WebRequest -Uri "http://127.0.0.1:11434/" -UseBasicParsing | Select-Object StatusCode
+  ```
+- Verifica se alguma firewall local está a bloquear a porta 11434.
+
+### Modelo Ollama não encontrado
+
+**Sintoma:** Nos logs aparece `model "llama3.2" not found` ou similar; o resumo é gerado por template.
+
+**Resolução:**
+- Verifica os modelos disponíveis:
+  ```powershell
+  ollama list
+  ```
+- Descarrega o modelo em falta:
+  ```powershell
+  ollama pull llama3.2
+  ```
+- Se usares um modelo diferente, atualiza a variable `OLLAMA_MODEL` no GitHub (Settings → Variables).
+
+### Timeout na chamada ao Ollama
+
+**Sintoma:** Nos logs aparece `timeout` e o resumo é gerado por template.
+
+**Resolução:**
+- O timeout por omissão é de 120 segundos. Se o modelo for muito grande, pode exceder este limite.
+- Considera usar um modelo mais leve:
+  ```powershell
+  ollama pull llama3.2:1b
+  ```
+  E atualiza a variable `OLLAMA_MODEL` para `llama3.2:1b`.
+- Verifica recursos da máquina (CPU/RAM) – modelos grandes em hardware limitado podem ser lentos.
+
+### Healthcheck falha – sem conectividade ao Azure DevOps
 
 - A VPN não está ativa. Liga a VPN corporativa e reinicia o run.
 - Testa manualmente:
@@ -278,7 +440,7 @@ Os relatórios também ficam disponíveis como **artefactos** no separador Actio
   ```
   Deve responder com código `200` ou redireccionamento.
 
-### Healthcheck falha – HTTP 401 ou 403
+### Healthcheck falha – HTTP 401 ou 403 no Azure DevOps
 
 - O `ADO_PAT` está inválido, expirado ou sem permissões.
 - Vai ao Azure DevOps → User Settings → Personal Access Tokens e verifica/renova o token.
@@ -300,7 +462,7 @@ playwright install chromium
 
 ---
 
-## 10. Checklist operacional diário
+## 11. Checklist operacional diário
 
 Nos dias de execução agendada (segunda-feira de semana ímpar, 07:30 UTC), confirma antes das 07:00 UTC:
 
@@ -308,6 +470,8 @@ Nos dias de execução agendada (segunda-feira de semana ímpar, 07:30 UTC), con
 - [ ] VPN corporativa ativa
 - [ ] Runner online em Settings → Actions → Runners
 - [ ] Sem alertas de PAT expirado no Azure DevOps
+- [ ] Serviço Ollama ativo: `Invoke-WebRequest -Uri "http://127.0.0.1:11434/" -UseBasicParsing | Select-Object StatusCode`
+- [ ] Modelo Ollama disponível: `ollama list`
 
 Após a execução (verificar no separador Actions):
 

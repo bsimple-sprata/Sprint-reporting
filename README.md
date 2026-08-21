@@ -39,7 +39,7 @@ Azure DevOps
 [snapshot.py]  ──────────────────────────────────────────────►  PNG (reports/<equipa>/snapshots/)
     │
     ▼
-[summarize.py]  (REST API Azure DevOps + OpenAI opcional)
+[summarize.py]  (REST API Azure DevOps + LLM local via Ollama)
     │
     ▼
 [publish.py]   ──────────────────────────────────────────────►  Markdown cumulativo (reports/<equipa>/<equipa>.md)
@@ -54,7 +54,7 @@ Azure DevOps
 |---|---|---|
 | Captura de screenshot | `src/snapshot.py` | Playwright headless → PNG |
 | Recolha de métricas | `src/summarize.py` | Azure DevOps REST API |
-| Geração de resumo | `src/summarize.py` | Template ou LLM (OpenAI opcional) |
+| Geração de resumo | `src/summarize.py` | LLM local via Ollama (fallback: template) |
 | Publicação cumulativa | `src/publish.py` | Markdown por equipa + audit log |
 | Orquestrador | `src/run_report.py` | CLI principal |
 | Automação | `.github/workflows/sprint-report.yml` | Agendamento GitHub Actions |
@@ -98,7 +98,7 @@ Sprint-reporting/
 - Python 3.13+
 - [Playwright](https://playwright.dev/python/) (browser headless)
 - Acesso ao Azure DevOps com um Personal Access Token (PAT) com permissões de leitura nos dashboards
-- (Opcional) Chave OpenAI para geração de resumos com LLM
+- [Ollama](https://ollama.com/) instalado e em execução na máquina runner Windows (porta 11434), com o modelo desejado carregado (ex: `llama3.2`)
 
 ---
 
@@ -126,7 +126,8 @@ Cria um ficheiro `.env` local (nunca commitar):
 ADO_PAT=<o_teu_personal_access_token>
 ADO_ORGANIZATION=<nome_da_organização>
 ADO_PROJECT=<nome_do_projeto>
-OPENAI_API_KEY=<chave_openai_opcional>
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=llama3.2
 ```
 
 Ou define diretamente em PowerShell:
@@ -141,16 +142,26 @@ $env:ADO_PROJECT = "..."
 
 Substitui os placeholders `{organization}`, `{project}` e `{dashboard_id_*}` pelos valores reais de cada equipa.
 
-### 5. Configurar GitHub Secrets (para automação)
+### 5. Configurar GitHub Secrets e Variables (para automação)
 
 No repositório GitHub → **Settings → Secrets and variables → Actions**, criar:
+
+**Secrets** (dados sensíveis):
 
 | Secret | Descrição |
 |---|---|
 | `ADO_PAT` | Personal Access Token do Azure DevOps |
 | `ADO_ORGANIZATION` | Nome da organização Azure DevOps |
 | `ADO_PROJECT` | Nome do projeto Azure DevOps |
-| `OPENAI_API_KEY` | (Opcional) Chave da API OpenAI |
+
+**Variables** (configuração não sensível):
+
+| Variable | Descrição | Valor por omissão |
+|---|---|---|
+| `OLLAMA_BASE_URL` | URL base do serviço Ollama local | `http://127.0.0.1:11434` |
+| `OLLAMA_MODEL` | Modelo Ollama a usar para gerar resumos | `llama3.2` |
+
+> Se `OLLAMA_BASE_URL` e `OLLAMA_MODEL` não estiverem definidas, o código usa os valores por omissão acima.
 
 ---
 
@@ -304,7 +315,7 @@ Este ficheiro permite auditar quando cada snapshot foi capturado e qual o relat�
 | **Markdown + Git** como formato de publicação | Simples, sem dependências externas, histórico nativo via git, legível no GitHub |
 | **GitHub Actions** para automação | Integrado com o repositório, sem infraestrutura adicional, suporte a `workflow_dispatch` para execuções manuais |
 | **YAML** para configuração | Legível, suportado nativamente em Python, fácil de versionar |
-| **OpenAI opcional** para resumos | Permite enriquecer os resumos sem obrigar a uma dependência externa; funciona sem chave via template |
+| **Ollama local** para resumos | LLM local sem dependências externas nem custos de API; funciona sem conectividade à internet; fallback automático para template se o serviço estiver indisponível |
 | **Semanas ímpares** como trigger biweekly | Simples de implementar no cron, sem necessidade de estado externo |
 | **Relatório por equipa** (ficheiro separado) | Isolamento; falha numa equipa não afeta as outras |
 
@@ -324,6 +335,7 @@ Esta solução está configurada para correr num **self-hosted runner local** �
 | PowerShell | 5.1+ (incluso no Windows 10/11) |
 | VPN corporativa | ativa antes de iniciar o runner |
 | Acesso ao Azure DevOps | requer PAT válido com permissão Read |
+| Ollama | instalado e em execução (porta 11434), modelo carregado |
 
 > Para instruções detalhadas de instalação e configuração no Windows, consulta [`docs/LOCAL_RUNNER_SETUP.md`](docs/LOCAL_RUNNER_SETUP.md).
 
@@ -343,6 +355,7 @@ Para que a execução automática (agendada) funcione:
 - ✅ Computador **ligado** no momento agendado (segunda-feira de semana ímpar, 07:30 UTC)
 - ✅ Runner **online** (serviço a correr)
 - ✅ VPN **ativa** com acesso ao Azure DevOps
+- ✅ Serviço **Ollama** ativo na máquina (porta 11434) com modelo carregado
 
 ### Como executar snapshot manual
 
@@ -391,3 +404,29 @@ Para que a execução automática (agendada) funcione:
 - Confirma que o PAT não expirou (Azure DevOps → User Settings → Personal Access Tokens).
 - Garante que o PAT tem permissão **Read** em Dashboards e Work Items.
 - Após atualizar o secret, lança novo run manual para confirmar.
+
+### Serviço Ollama não acessível
+
+**Sintoma:** O healthcheck Ollama falha ou o resumo é gerado por template com aviso `Ollama indisponível`.
+
+**Resolução:**
+- Confirma que o Ollama está instalado e em execução na máquina runner:
+  ```powershell
+  Invoke-WebRequest -Uri "http://127.0.0.1:11434/" -UseBasicParsing | Select-Object StatusCode
+  ```
+- Se o serviço não estiver ativo, inicia-o:
+  ```powershell
+  Start-Process "ollama" -ArgumentList "serve" -WindowStyle Hidden
+  ```
+- Verifica se o modelo está disponível:
+  ```powershell
+  ollama list
+  ```
+- Se o modelo não estiver listado, descarrega-o:
+  ```powershell
+  ollama pull llama3.2
+  ```
+- Para testar inferência diretamente:
+  ```powershell
+  ollama run llama3.2 "Olá, responde em português."
+  ```
