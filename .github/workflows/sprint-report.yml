@@ -88,6 +88,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Verificar Python no runner
         shell: powershell
         run: |
