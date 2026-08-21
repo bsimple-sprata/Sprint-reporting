@@ -22,39 +22,49 @@ permissions:
 jobs:
   generate-reports:
     name: Gerar Relatórios de Sprint
-    runs-on: [self-hosted, linux, corp-network, reporting]
+    runs-on: [self-hosted, windows, corp-network, reporting]
 
     steps:
       - name: Healthcheck – Conectividade ao Azure DevOps
         env:
           ADO_PAT: ${{ secrets.ADO_PAT }}
           ADO_ORGANIZATION: ${{ secrets.ADO_ORGANIZATION }}
+        shell: pwsh
         run: |
-          echo "A verificar conectividade ao Azure DevOps..."
-          if [ -z "$ADO_PAT" ]; then
-            echo "::error::Secret ADO_PAT não está configurado. Configura o secret no repositório (Settings → Secrets → Actions)."
+          Write-Output "A verificar conectividade ao Azure DevOps..."
+          if (-not $env:ADO_PAT) {
+            Write-Output "::error::Secret ADO_PAT não está configurado. Configura o secret no repositório (Settings → Secrets → Actions)."
             exit 1
-          fi
-          if [ -z "$ADO_ORGANIZATION" ]; then
-            echo "::error::Secret ADO_ORGANIZATION não está configurado. Configura o secret no repositório."
+          }
+          if (-not $env:ADO_ORGANIZATION) {
+            Write-Output "::error::Secret ADO_ORGANIZATION não está configurado. Configura o secret no repositório."
             exit 1
-          fi
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            --max-time 15 \
-            -u ":${ADO_PAT}" \
-            "https://dev.azure.com/${ADO_ORGANIZATION}/_apis/projects?api-version=7.1") || true
-          if [ "$HTTP_STATUS" = "200" ]; then
-            echo "Conectividade ao Azure DevOps OK (HTTP $HTTP_STATUS)."
-          elif [ "$HTTP_STATUS" = "401" ] || [ "$HTTP_STATUS" = "403" ]; then
-            echo "::error::Falha de autenticação ao Azure DevOps (HTTP $HTTP_STATUS). Verifica se o ADO_PAT é válido e tem permissões suficientes."
+          }
+          try {
+            $base64Pat = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$env:ADO_PAT"))
+            $response = Invoke-WebRequest `
+              -Uri "https://dev.azure.com/$env:ADO_ORGANIZATION/_apis/projects?api-version=7.1" `
+              -Headers @{ Authorization = "Basic $base64Pat" } `
+              -TimeoutSec 15 `
+              -UseBasicParsing `
+              -ErrorAction Stop
+            $httpStatus = $response.StatusCode
+          } catch {
+            $httpStatus = $_.Exception.Response.StatusCode.value__
+            if (-not $httpStatus) {
+              Write-Output "::error::Sem conectividade ao Azure DevOps. Verifica se a VPN está ativa e o runner tem acesso à rede corporativa."
+              exit 1
+            }
+          }
+          if ($httpStatus -eq 200) {
+            Write-Output "Conectividade ao Azure DevOps OK (HTTP $httpStatus)."
+          } elseif ($httpStatus -eq 401 -or $httpStatus -eq 403) {
+            Write-Output "::error::Falha de autenticação ao Azure DevOps (HTTP $httpStatus). Verifica se o ADO_PAT é válido e tem permissões suficientes."
             exit 1
-          elif [ -z "$HTTP_STATUS" ] || [ "$HTTP_STATUS" = "000" ]; then
-            echo "::error::Sem conectividade ao Azure DevOps. Verifica se a VPN está ativa e o runner tem acesso à rede corporativa."
+          } else {
+            Write-Output "::error::Resposta inesperada do Azure DevOps (HTTP $httpStatus). Verifica a conectividade e as credenciais."
             exit 1
-          else
-            echo "::error::Resposta inesperada do Azure DevOps (HTTP $HTTP_STATUS). Verifica a conectividade e as credenciais."
-            exit 1
-          fi
+          }
 
       - name: Checkout do repositório
         uses: actions/checkout@v4
@@ -64,28 +74,30 @@ jobs:
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           cache: pip
 
       - name: Instalar dependências Python
         run: pip install -r requirements.txt
 
       - name: Instalar browsers Playwright
-        run: playwright install chromium --with-deps
+        shell: pwsh
+        run: playwright install chromium
 
       - name: Executar testes
         run: pytest tests/ -v
 
       - name: Verificar se é semana de execução
         id: check_week
+        shell: pwsh
         run: |
-          WEEK=$(python -c "from datetime import datetime, timezone; d=datetime.now(timezone.utc); print(d.isocalendar()[1])")
-          echo "week=$WEEK" >> "$GITHUB_OUTPUT"
-          if [ $(( WEEK % 2 )) -eq 1 ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+          $week = python -c "from datetime import datetime, timezone; d=datetime.now(timezone.utc); print(d.isocalendar()[1])"
+          echo "week=$week" >> $env:GITHUB_OUTPUT
+          if ([int]$week % 2 -eq 1) {
+            echo "run=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "run=false" >> $env:GITHUB_OUTPUT
+          }
 
       - name: Executar geração de relatórios
         if: steps.check_week.outputs.run == 'true' || github.event_name == 'workflow_dispatch'
@@ -96,23 +108,26 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           INPUT_SPRINT_LABEL: ${{ github.event.inputs.sprint_label }}
           INPUT_TEAM: ${{ github.event.inputs.team }}
+        shell: pwsh
         run: |
-          ARGS="--config config/config.yaml"
-          if [ -n "$INPUT_SPRINT_LABEL" ]; then
-            ARGS="$ARGS --sprint-label $INPUT_SPRINT_LABEL"
-          fi
-          if [ -n "$INPUT_TEAM" ]; then
-            ARGS="$ARGS --team $INPUT_TEAM"
-          fi
-          python src/run_report.py $ARGS
+          $scriptArgs = @("--config", "config/config.yaml")
+          if ($env:INPUT_SPRINT_LABEL) {
+            $scriptArgs += @("--sprint-label", $env:INPUT_SPRINT_LABEL)
+          }
+          if ($env:INPUT_TEAM) {
+            $scriptArgs += @("--team", $env:INPUT_TEAM)
+          }
+          python src/run_report.py @scriptArgs
 
       - name: Confirmar e publicar relatórios
         if: steps.check_week.outputs.run == 'true' || github.event_name == 'workflow_dispatch'
+        shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add reports/
-          git diff --cached --quiet || git commit -m "chore(reports): relatório sprint $(date -u +%Y-W%V)"
+          $sprint = python -c "from datetime import datetime, timezone; d=datetime.now(timezone.utc); print(f'{d.year}-W{d.isocalendar()[1]:02d}')"
+          $diff = git diff --cached --quiet; if ($LASTEXITCODE -ne 0) { git commit -m "chore(reports): relatório sprint $sprint" }
           git push
 
       - name: Publicar artefactos

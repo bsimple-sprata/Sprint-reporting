@@ -1,7 +1,7 @@
-# Guia de Instalação – Self-Hosted Runner Local
+# Guia de Instalação – Self-Hosted Runner Local (Windows)
 
-> Guia prático para configurar a tua máquina como runner local do GitHub Actions para o projeto Sprint Reporting.  
-> Sistema operativo principal assumido: **Linux**. Notas para Windows/macOS incluídas quando relevante.
+> Guia prático para configurar a tua máquina Windows como runner local do GitHub Actions para o projeto Sprint Reporting.  
+> Sistema operativo: **Windows 10/11 (64-bit)**. Python **3.13**. Todos os comandos são em **PowerShell**.
 
 ---
 
@@ -24,19 +24,19 @@
 
 Confirma que tens instalado na máquina:
 
-| Requisito | Versão mínima | Verificação |
+| Requisito | Versão mínima | Verificação (PowerShell) |
 |---|---|---|
 | Git | 2.x | `git --version` |
-| Python | 3.12+ | `python3 --version` |
-| curl | qualquer recente | `curl --version` |
+| Python | 3.13+ | `python --version` |
+| PowerShell | 5.1+ (incluso no Windows 10/11) | `$PSVersionTable.PSVersion` |
 | VPN corporativa | — | acesso a `dev.azure.com` |
 
 Adicionalmente:
 - Conta GitHub com acesso de administrador ao repositório `bsimple-sprata/Sprint-reporting`.
 - Personal Access Token (PAT) do Azure DevOps com permissão **Read** em Dashboards e Work Items.
 
-> **Windows:** instala o Git for Windows e o Python a partir de [python.org](https://www.python.org/). Os comandos abaixo usam `bash`; no PowerShell adapta os caminhos conforme necessário.  
-> **macOS:** instala via Homebrew: `brew install git python`.
+> **Python 3.13:** instala a partir de [python.org](https://www.python.org/downloads/). Durante a instalação, assinala a opção **"Add Python to PATH"**.  
+> **Git:** instala o Git for Windows a partir de [git-scm.com](https://git-scm.com/download/win).
 
 ---
 
@@ -46,48 +46,52 @@ Adicionalmente:
 
 1. Vai ao repositório no GitHub.
 2. Clica em **Settings → Actions → Runners → New self-hosted runner**.
-3. Seleciona o sistema operativo: **Linux** (ou Windows/macOS conforme o teu caso).
-4. Copia e executa os comandos apresentados. Exemplo típico para Linux x64:
+3. Seleciona o sistema operativo: **Windows**.
+4. Copia e executa os comandos apresentados. Exemplo típico para Windows x64:
 
-```bash
+```powershell
 # Criar pasta dedicada
-mkdir -p ~/actions-runner && cd ~/actions-runner
+New-Item -ItemType Directory -Path "$HOME\actions-runner" -Force
+Set-Location "$HOME\actions-runner"
 
 # Descarregar o runner (versão apresentada no GitHub)
-curl -o actions-runner-linux-x64.tar.gz -L \
-  https://github.com/actions/runner/releases/download/v<VERSION>/actions-runner-linux-x64-<VERSION>.tar.gz
+Invoke-WebRequest `
+  -Uri "https://github.com/actions/runner/releases/download/v<VERSION>/actions-runner-win-x64-<VERSION>.zip" `
+  -OutFile "actions-runner-win-x64.zip"
 
 # Verificar integridade (hash apresentado no GitHub)
-echo "<HASH>  actions-runner-linux-x64.tar.gz" | shasum -a 256 -c
+if ((Get-FileHash -Algorithm SHA256 "actions-runner-win-x64.zip").Hash.ToUpper() -ne "<HASH>".ToUpper()) {
+    throw "Hash inválido – ficheiro corrompido."
+}
 
 # Extrair
-tar xzf ./actions-runner-linux-x64.tar.gz
+Expand-Archive -Path "actions-runner-win-x64.zip" -DestinationPath . -Force
 ```
 
 > Substitui `<VERSION>` e `<HASH>` pelos valores exatos que o GitHub apresenta no passo anterior.
 
 ### 2.2 Configurar o runner
 
-```bash
-cd ~/actions-runner
+```powershell
+Set-Location "$HOME\actions-runner"
 
 # Configurar (substitui <TOKEN> pelo token gerado pelo GitHub)
-./config.sh \
-  --url https://github.com/bsimple-sprata/Sprint-reporting \
-  --token <TOKEN> \
-  --name "runner-local-$(hostname)" \
-  --labels "self-hosted,linux,corp-network,reporting" \
-  --work "_work" \
+.\config.cmd `
+  --url https://github.com/bsimple-sprata/Sprint-reporting `
+  --token <TOKEN> `
+  --name "runner-local-$env:COMPUTERNAME" `
+  --labels "self-hosted,windows,corp-network,reporting" `
+  --work "_work" `
   --unattended
 ```
 
-O script perguntará apenas se o `--unattended` não for passado. Com `--unattended`, usa os valores indicados.
+O script apenas faz perguntas interativas se `--unattended` não for passado. Com `--unattended`, usa os valores indicados.
 
 ### 2.3 Iniciar o runner (modo interativo – teste inicial)
 
-```bash
-cd ~/actions-runner
-./run.sh
+```powershell
+Set-Location "$HOME\actions-runner"
+.\run.cmd
 ```
 
 Deves ver uma mensagem como:
@@ -100,31 +104,28 @@ Listening for Jobs
 
 ## 3. Configuração como serviço (auto-start)
 
-Para que o runner inicie automaticamente com o sistema:
+Para que o runner inicie automaticamente com o sistema (requer PowerShell como **Administrador**):
 
-### Linux (systemd)
-
-```bash
-cd ~/actions-runner
-sudo ./svc.sh install
-sudo ./svc.sh start
+```powershell
+Set-Location "$HOME\actions-runner"
+.\svc.cmd install
+.\svc.cmd start
 ```
 
 Verificar estado:
-```bash
-sudo ./svc.sh status
+```powershell
+.\svc.cmd status
 # ou
-sudo systemctl status actions.runner.bsimple-sprata-Sprint-reporting.<runner-name>.service
+Get-Service -Name "actions.runner.*"
 ```
 
 Para parar ou desinstalar o serviço:
-```bash
-sudo ./svc.sh stop
-sudo ./svc.sh uninstall
+```powershell
+.\svc.cmd stop
+.\svc.cmd uninstall
 ```
 
-> **Windows:** o runner pode ser configurado como serviço Windows. Durante o `config.cmd`, escolhe a opção de instalar como serviço, ou executa `./svc.sh install` em PowerShell com permissões de administrador.  
-> **macOS:** usa `launchd`; o `svc.sh` também funciona em macOS com o mesmo comando.
+> O serviço Windows criado pelo runner chama-se `actions.runner.bsimple-sprata-Sprint-reporting.<runner-name>` e pode ser gerido através da consola de Serviços do Windows (`services.msc`) ou com `Get-Service` / `Restart-Service` em PowerShell.
 
 ---
 
@@ -133,13 +134,13 @@ sudo ./svc.sh uninstall
 Durante a configuração (passo 2.2), as labels atribuídas ao runner devem ser:
 
 ```
-self-hosted,linux,corp-network,reporting
+self-hosted,windows,corp-network,reporting
 ```
 
 Estas labels correspondem exatamente ao `runs-on` definido no workflow:
 
 ```yaml
-runs-on: [self-hosted, linux, corp-network, reporting]
+runs-on: [self-hosted, windows, corp-network, reporting]
 ```
 
 > Se quiseres usar um nome de label diferente, atualiza também o `runs-on` no ficheiro `.github/workflows/sprint-report.yml`.
@@ -175,11 +176,13 @@ Antes do primeiro run, confirma que a VPN está ativa e as credenciais estão co
 
 ### 6.1 Verificar conectividade básica
 
-```bash
-curl -s -o /dev/null -w "%{http_code}" \
-  --max-time 15 \
-  -u ":$ADO_PAT" \
-  "https://dev.azure.com/$ADO_ORGANIZATION/_apis/projects?api-version=7.1"
+```powershell
+$base64Pat = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$env:ADO_PAT"))
+$response = Invoke-WebRequest `
+  -Uri "https://dev.azure.com/$env:ADO_ORGANIZATION/_apis/projects?api-version=7.1" `
+  -Headers @{ Authorization = "Basic $base64Pat" } `
+  -UseBasicParsing
+$response.StatusCode
 ```
 
 Resultado esperado: `200`
@@ -189,14 +192,14 @@ Resultado esperado: `200`
 | `200` | Tudo certo – VPN e PAT válidos |
 | `401` | PAT inválido ou expirado |
 | `403` | PAT sem permissões suficientes |
-| `000` | Sem conectividade – VPN desligada ou host inacessível |
+| erro de ligação | Sem conectividade – VPN desligada ou host inacessível |
 
-### 6.2 Exportar variáveis para teste local
+### 6.2 Definir variáveis de ambiente para teste local
 
-```bash
-export ADO_PAT="<o_teu_pat>"
-export ADO_ORGANIZATION="<nome_org>"
-export ADO_PROJECT="<nome_projeto>"
+```powershell
+$env:ADO_PAT = "<o_teu_pat>"
+$env:ADO_ORGANIZATION = "<nome_org>"
+$env:ADO_PROJECT = "<nome_projeto>"
 ```
 
 > Nunca coloques estes valores em ficheiros que sejam committed. Usa sempre variáveis de ambiente ou o ficheiro `.env` (que está no `.gitignore`).
@@ -222,20 +225,20 @@ Com o runner online e os secrets configurados:
 
 Após o run com sucesso, verifica os artefactos gerados:
 
-```bash
+```powershell
 # Navega até ao repositório local (ou faz pull das alterações)
-cd ~/Sprint-reporting
+Set-Location "$HOME\Sprint-reporting"
 git pull
 
 # Verifica os ficheiros gerados
-ls reports/
-# Deverás ver pastas por equipa, ex: equipa-alpha/, equipa-beta/
+Get-ChildItem reports/
+# Deverás ver pastas por equipa, ex: equipa-alpha\, equipa-beta\
 
 # Abre um relatório para verificar o conteúdo
-cat reports/equipa-alpha/equipa-alpha.md
+Get-Content reports\equipa-alpha\equipa-alpha.md
 
 # Verifica o log de auditoria
-cat reports/audit.log
+Get-Content reports\audit.log
 ```
 
 O ficheiro `audit.log` deve ter uma nova linha com o timestamp da execução, por exemplo:
@@ -251,19 +254,29 @@ Os relatórios também ficam disponíveis como **artefactos** no separador Actio
 
 ### Runner não aparece online no GitHub
 
-- Verifica se o serviço está ativo: `sudo systemctl status actions.runner.*.service`
-- Reinicia o serviço: `sudo ./svc.sh restart` (na pasta `~/actions-runner`)
-- Confirma que o token de registo não expirou (tokens de configuração expiram após 1 hora; gera um novo em Settings → Runners se necessário)
+- Verifica se o serviço está ativo:
+  ```powershell
+  Get-Service -Name "actions.runner.*"
+  ```
+- Reinicia o serviço:
+  ```powershell
+  Restart-Service -Name "actions.runner.*"
+  ```
+- Confirma que o token de registo não expirou (tokens de configuração expiram após 1 hora; gera um novo em Settings → Runners se necessário).
 
 ### Workflow fica em fila e não inicia
 
 - O runner pode estar offline ou as labels não correspondem.
-- Confirma em **Settings → Actions → Runners** que o runner tem estado **Online** e as labels corretas: `self-hosted`, `linux`, `corp-network`, `reporting`.
+- Confirma em **Settings → Actions → Runners** que o runner tem estado **Online** e as labels corretas: `self-hosted`, `windows`, `corp-network`, `reporting`.
 
-### Healthcheck falha – HTTP 000 (sem conectividade)
+### Healthcheck falha – sem conectividade
 
 - A VPN não está ativa. Liga a VPN corporativa e reinicia o run.
-- Testa manualmente: `curl -I https://dev.azure.com` — deve responder com HTTP 2xx ou 3xx.
+- Testa manualmente:
+  ```powershell
+  Invoke-WebRequest -Uri "https://dev.azure.com" -UseBasicParsing | Select-Object StatusCode
+  ```
+  Deve responder com código `200` ou redireccionamento.
 
 ### Healthcheck falha – HTTP 401 ou 403
 
@@ -273,12 +286,12 @@ Os relatórios também ficam disponíveis como **artefactos** no separador Actio
 
 ### Erro de instalação Playwright
 
-```bash
-playwright install chromium --with-deps
+```powershell
+playwright install chromium
 ```
 
-- Em Linux, pode ser necessário instalar dependências adicionais do sistema. O `--with-deps` deve tratar disso automaticamente.
-- Se persistir, corre `playwright install-deps` separadamente.
+- No Windows, o `--with-deps` não é necessário nem suportado; usa sempre apenas `playwright install chromium`.
+- Se surgir erro de permissões, executa o PowerShell como Administrador.
 
 ### Erro de permissões no git push
 

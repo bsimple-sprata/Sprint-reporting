@@ -95,7 +95,7 @@ Sprint-reporting/
 
 ## Pré-requisitos
 
-- Python 3.12+
+- Python 3.13+
 - [Playwright](https://playwright.dev/python/) (browser headless)
 - Acesso ao Azure DevOps com um Personal Access Token (PAT) com permissões de leitura nos dashboards
 - (Opcional) Chave OpenAI para geração de resumos com LLM
@@ -113,9 +113,9 @@ cd Sprint-reporting
 
 ### 2. Instalar dependências
 
-```bash
+```powershell
 pip install -r requirements.txt
-playwright install chromium --with-deps
+playwright install chromium
 ```
 
 ### 3. Configurar variáveis de ambiente
@@ -129,12 +129,12 @@ ADO_PROJECT=<nome_do_projeto>
 OPENAI_API_KEY=<chave_openai_opcional>
 ```
 
-Ou exporta diretamente:
+Ou define diretamente em PowerShell:
 
-```bash
-export ADO_PAT="..."
-export ADO_ORGANIZATION="..."
-export ADO_PROJECT="..."
+```powershell
+$env:ADO_PAT = "..."
+$env:ADO_ORGANIZATION = "..."
+$env:ADO_PROJECT = "..."
 ```
 
 ### 4. Atualizar `config/config.yaml`
@@ -318,20 +318,20 @@ Esta solução está configurada para correr num **self-hosted runner local** �
 
 | Requisito | Versão mínima |
 |---|---|
-| Sistema operativo | Linux (recomendado); Windows 10+ e macOS também suportados |
+| Sistema operativo | Windows 10/11 (64-bit) |
 | Git | 2.x |
-| Python | 3.12+ |
-| curl | qualquer versão recente |
+| Python | 3.13+ |
+| PowerShell | 5.1+ (incluso no Windows 10/11) |
 | VPN corporativa | ativa antes de iniciar o runner |
 | Acesso ao Azure DevOps | requer PAT válido com permissão Read |
 
-> **Nota Windows/macOS:** os passos de instalação do runner são semelhantes; consulta `docs/LOCAL_RUNNER_SETUP.md` para instruções detalhadas por plataforma.
+> Para instruções detalhadas de instalação e configuração no Windows, consulta [`docs/LOCAL_RUNNER_SETUP.md`](docs/LOCAL_RUNNER_SETUP.md).
 
 ### Como registar o runner no GitHub
 
 1. Vai ao repositório no GitHub → **Settings → Actions → Runners → New self-hosted runner**.
 2. Segue as instruções apresentadas para o teu sistema operativo (download + configuração).
-3. Durante a configuração, define as labels: `self-hosted,linux,corp-network,reporting`.
+3. Durante a configuração, define as labels: `self-hosted,windows,corp-network,reporting`.
 4. Inicia o runner. O workflow irá detetar automaticamente o runner com essas labels.
 
 > Para guia completo passo a passo, consulta [`docs/LOCAL_RUNNER_SETUP.md`](docs/LOCAL_RUNNER_SETUP.md).
@@ -362,11 +362,10 @@ Para que a execução automática (agendada) funcione:
 
 **Resolução:**
 - Verifica se o serviço do runner está ativo na máquina local:
-  ```bash
-  # Linux (serviço systemd)
-  sudo systemctl status actions.runner.<org>-<repo>.<runner-name>.service
+  ```powershell
+  Get-Service -Name "actions.runner.*"
   # ou, se não configurado como serviço:
-  cd ~/actions-runner && ./run.sh
+  Set-Location "$HOME\actions-runner"; .\run.cmd
   ```
 - Confirma que o runner aparece como **Online** em Settings → Actions → Runners.
 
@@ -376,8 +375,12 @@ Para que a execução automática (agendada) funcione:
 
 **Resolução:**
 - Liga a VPN corporativa antes de iniciar o runner.
-- Verifica conectividade: `curl -u ":$ADO_PAT" "https://dev.azure.com/$ADO_ORGANIZATION/_apis/projects?api-version=7.1"`
-- Se a resposta for `HTTP 200`, a VPN e as credenciais estão corretas.
+- Verifica conectividade em PowerShell:
+  ```powershell
+  $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$env:ADO_PAT"))
+  (Invoke-WebRequest -Uri "https://dev.azure.com/$env:ADO_ORGANIZATION/_apis/projects?api-version=7.1" -Headers @{ Authorization = "Basic $b64" } -UseBasicParsing).StatusCode
+  ```
+- Se a resposta for `200`, a VPN e as credenciais estão corretas.
 
 ### Falha de autenticação `ADO_PAT`
 
