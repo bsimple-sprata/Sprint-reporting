@@ -22,7 +22,7 @@ permissions:
 jobs:
   generate-reports:
     name: Gerar Relatórios de Sprint
-    runs-on: [self-hosted, windows, corp-network, reporting]
+    runs-on: [self-hosted, windows]
 
     steps:
       - name: Healthcheck – Serviço Ollama
