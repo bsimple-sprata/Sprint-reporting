@@ -5,7 +5,7 @@ Captura o snapshot visual do dashboard Azure DevOps usando Playwright.
 
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -26,7 +26,7 @@ def capture_dashboard_snapshot(team: dict, output_dir: str, ado_pat: str) -> str
         Caminho absoluto para o ficheiro de imagem gerado
     """
     team_slug = team["name"].lower().replace(" ", "-")
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     snapshot_path = Path(output_dir) / f"{team_slug}_{timestamp}.png"
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
 
