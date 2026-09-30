@@ -65,7 +65,8 @@ def main(argv=None):
                     import shutil
                     dest = args.output.parent / image
                     dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(source, dest)
+                    if source.resolve() != dest.resolve():
+                        shutil.copy2(source, dest)
                 validate_draft(text, data, args.output)
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 args.output.write_text(text, encoding="utf-8")

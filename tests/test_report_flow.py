@@ -108,13 +108,42 @@ def test_explicit_publish_appends_only_after_confirmation(tmp_path, monkeypatch)
     image.touch()
     data = sample_data(str(image))
     draft = tmp_path / "draft.md"
-    draft.write_text(report_flow.render(data), encoding="utf-8")
+    (tmp_path / "snapshots").mkdir()
+    (tmp_path / "snapshots/source.png").touch()
+    draft.write_text(report_flow.render(data, image="snapshots/source.png"), encoding="utf-8")
     with pytest.raises(ValueError, match="--confirm"):
         report_flow.publish_draft(data, draft, CONFIG, False)
     assert not (tmp_path / "reports").exists()
     published = Path(report_flow.publish_draft(data, draft, CONFIG, True))
     assert published.exists()
     assert "snapshots/source.png" in published.read_text(encoding="utf-8")
+    assert "**Capturado em:** 2026-09-30 12:00 UTC" in published.read_text(encoding="utf-8")
     with pytest.raises(ValueError, match="já existe"):
         report_flow.publish_draft(data, draft, CONFIG, True)
     assert published.read_text(encoding="utf-8").count("## Sprint ") == 1
+
+
+def test_publish_rejects_mismatched_reviewed_snapshot(tmp_path, monkeypatch):
+    monkeypatch.setattr(report_flow, "ROOT", tmp_path)
+    image = tmp_path / "source.png"
+    image.write_bytes(b"source")
+    reviewed = tmp_path / "snapshots/source.png"
+    reviewed.parent.mkdir()
+    reviewed.write_bytes(b"different")
+    data = sample_data(str(image))
+    draft = tmp_path / "draft.md"
+    draft.write_text(report_flow.render(data, image="snapshots/source.png"), encoding="utf-8")
+    with pytest.raises(ValueError, match="não corresponde"):
+        report_flow.publish_draft(data, draft, CONFIG, True)
+    assert not (tmp_path / "reports").exists()
+
+
+def test_render_snapshot_to_same_folder(tmp_path, monkeypatch):
+    image = tmp_path / "snapshots/source.png"
+    image.parent.mkdir()
+    image.write_bytes(b"snapshot")
+    collection = tmp_path / "dashboard.json"
+    collection.write_text(json.dumps(sample_data(str(image))), encoding="utf-8")
+    draft = tmp_path / "draft.md"
+    assert report_cli.main(["render", "--input", str(collection), "--output", str(draft)]) == 0
+    assert image.read_bytes() == b"snapshot"

@@ -1,6 +1,7 @@
 """Passos locais e independentes para preparar rascunhos de sprint."""
 
 import json
+import filecmp
 import re
 import shutil
 from datetime import datetime, timezone
@@ -10,7 +11,7 @@ from urllib.parse import unquote, urlsplit
 import yaml
 
 from publish import publish_report
-from report_guidelines import build_report_section, validate_report_markdown
+from report_guidelines import IMAGE_LINK_RE, build_report_section, validate_report_markdown
 from snapshot import collect_dashboard_widgets
 from summarize import fetch_ado_metrics
 
@@ -172,6 +173,13 @@ def publish_draft(data: dict, draft_path: Path, config: dict, pat_confirmed: boo
     source = data.get("snapshot")
     if not source or not Path(source).is_file():
         raise ValueError("Publicação exige snapshot existente na recolha.")
+    links = IMAGE_LINK_RE.findall(draft)
+    expected = f"snapshots/{Path(source).name}"
+    reviewed_image = draft_path.parent / expected
+    if links != [expected] or not reviewed_image.is_file() or not filecmp.cmp(
+        source, reviewed_image, shallow=False
+    ):
+        raise ValueError("O snapshot do rascunho não corresponde à imagem da recolha.")
     team = resolve_team(config, data["team"])
     output_dir = (ROOT / team["publish_to"]).resolve()
     if not output_dir.is_relative_to((ROOT / "reports").resolve()):
@@ -182,4 +190,5 @@ def publish_draft(data: dict, draft_path: Path, config: dict, pat_confirmed: boo
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, dest)
     summary = draft.split("### Resumo Executivo\n", 1)[1].split("\n---", 1)[0].strip()
-    return publish_report(team, summary, str(dest), str(output_dir), data["sprint"])
+    return publish_report(team, summary, str(dest), str(output_dir), data["sprint"],
+                          captured_at=data["captured_at"])
