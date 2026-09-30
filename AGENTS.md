@@ -1,4 +1,4 @@
-# Protocolo para preparar reports
+# INSTRUÇÕES para preparar reports
 
 1. Interpreta o pedido e resolve a equipa em `config/config.yaml`; confirma a sprint se o identificador atual não for conhecido. Nunca suponhas que a semana ISO corresponde à sprint Azure DevOps.
 2. Pergunta se o resultado deve aparecer na CLI ou num ficheiro na pasta atual quando isso não estiver claro.
