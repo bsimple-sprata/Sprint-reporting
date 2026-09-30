@@ -1,6 +1,7 @@
 # Sprint Reporting – Azure DevOps
 
-> Preparação local de rascunhos de sprint com Copilot CLI e evidências do Azure DevOps. A automação cumulativa anterior continua disponível separadamente.
+> Preparação local de rascunhos de sprint review com Copilot CLI e evidências do Azure DevOps.
+           A automação cumulativa anterior continua disponível separadamente.
 
 ---
 
