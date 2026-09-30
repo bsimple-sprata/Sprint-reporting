@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from report_flow import (
-    collect, load_config, publish_draft, read_collection, render,
+    collect, ensure_not_published_output, load_config, publish_draft, read_collection, render,
     resolve_team, validate_draft,
 )
 
@@ -49,6 +49,8 @@ def main(argv=None):
             collect(config, args.team, sprint, output, pat, args.snapshot)
             print(f"Recolha guardada em {output}")
         elif args.command == "render":
+            if args.output:
+                ensure_not_published_output(args.output)
             data = read_collection(args.input)
             summary = args.summary_file.read_text(encoding="utf-8") if args.summary_file else None
             image = None

@@ -40,7 +40,8 @@ def test_generate_from_template_min_lines():
     assert len(lines) >= 5
 
 
-def test_publish_report_creates_file():
+def test_publish_report_creates_file(monkeypatch, tmp_path):
+    monkeypatch.setenv("AUDIT_LOG", str(tmp_path / "audit.log"))
     with tempfile.TemporaryDirectory() as tmpdir:
         snapshots_dir = Path(tmpdir) / "snapshots"
         snapshots_dir.mkdir(parents=True, exist_ok=True)
@@ -55,7 +56,8 @@ def test_publish_report_creates_file():
         assert "![Dashboard Equipa Test](snapshots/snap.png)" in content
 
 
-def test_publish_report_is_cumulative():
+def test_publish_report_is_cumulative(monkeypatch, tmp_path):
+    monkeypatch.setenv("AUDIT_LOG", str(tmp_path / "audit.log"))
     with tempfile.TemporaryDirectory() as tmpdir:
         snapshots_dir = Path(tmpdir) / "snapshots"
         snapshots_dir.mkdir(parents=True, exist_ok=True)

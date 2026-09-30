@@ -1,6 +1,42 @@
 # Sprint Reporting – Azure DevOps
 
-> Automação de reporting executivo de sprints para 6 equipas, com publicação cumulativa a cada 2 semanas.
+> Preparação local de rascunhos de sprint com Copilot CLI e evidências do Azure DevOps. A automação cumulativa anterior continua disponível separadamente.
+
+---
+
+## Uso diário no Windows (recomendado)
+
+1. Abre esta pasta no Explorador do Windows e inicia o PowerShell na pasta. Liga a VPN e garante acesso ao dashboard Azure DevOps.
+2. Instala as dependências: `python -m pip install -r requirements.txt` e `python -m playwright install chromium`. Instala o [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli) e autentica-te localmente.
+3. Define `ADO_PAT` e `ADO_BASE_URL` **apenas no ambiente** (não os incluas em prompts, ficheiros ou comandos partilhados). Para a configuração atual, `ADO_BASE_URL` é a URL base da coleção, sem o projeto. O projeto é resolvido a partir do dashboard se `global.project` ainda for um placeholder. O PAT precisa de acesso de leitura à API e ao dashboard; a autenticação browser via PAT pode não funcionar em instalações com SSO/NTLM — confirma a sessão local antes de confiar na recolha.
+4. Executa `copilot` e pede, por exemplo:
+
+   > Prepara o report da Equipa Delta para a sprint 290. Consulta o dashboard, mostra o rascunho no terminal e não publiques.
+
+   Ou:
+
+   > Prepara o report da Equipa Delta para a sprint 290 e guarda o rascunho em `.\report-equipa-delta.md` na pasta atual. Não faças commit nem push.
+
+O agente `sprint-report-coordinator` segue `AGENTS.md`, recolhe dados com `dashboard-collector`, pede ao `report-writer` um resumo PT-PT e usa `report-validator` para rever estrutura e afirmações. Se o modo de saída ou a sprint não forem conhecidos, confirma-os. O dashboard configurado é lido no browser; os textos de widgets identificáveis e o total WIQL são guardados como evidência em `workspace/` (ignorado pelo Git). **O total WIQL abrange iterações sob o projeto, não é automaticamente o total desta sprint.** A imagem é opcional e nunca substitui dados estruturados. Se a VPN, a autenticação ou os widgets falharem, revê os avisos antes de redigir.
+
+Também podes executar os passos manualmente, em PowerShell, na raiz do repositório:
+
+```powershell
+python src/report_cli.py collect --team "Equipa Delta" --sprint "290" --snapshot
+python src/report_cli.py render --input workspace/equipa-delta/dashboard.json
+python src/report_cli.py render --input workspace/equipa-delta/dashboard.json --output report-equipa-delta.md
+python src/report_cli.py validate --input workspace/equipa-delta/dashboard.json --draft report-equipa-delta.md
+```
+
+`render` aceita `--summary-file workspace/resumo.md` para texto elaborado pelo agente a partir das evidências. Sem `--output`, mostra só no terminal; com `--output`, cria um ficheiro local e copia a imagem para `snapshots/` junto ao rascunho se existir. A validação Python verifica estrutura, imagem e números, mas as afirmações qualitativas exigem revisão humana/do agente. `workspace/` pode conter informação interna: mantém-no fora do Git.
+
+**Rascunho ≠ validado ≠ publicado.** Só após confirmação explícita para atualizar o histórico cumulativo, e com um snapshot disponível, usa:
+
+```powershell
+python src/report_cli.py publish --input workspace/equipa-delta/dashboard.json --draft report-equipa-delta.md --confirm
+```
+
+Este comando atualiza `reports/` e o log de auditoria; **não** faz commit nem push. `collect`, `render` e `validate` não publicam. O antigo `python src/run_report.py` executa imediatamente captura, resumo e publicação: reserva-o exclusivamente para a automação opcional, não para pedidos interativos.
 
 ---
 
@@ -25,11 +61,11 @@
 
 ## Objetivo
 
-Recolher automaticamente os dashboards do Azure DevOps de 6 equipas a cada 2 semanas, gerar um resumo executivo de 5 a 10 linhas por equipa e publicar os resultados de forma cumulativa neste repositório para revisão durante a sprint review.
+Preparar, rever e apresentar reports de sprint a pedido, no terminal ou em ficheiro local, com recolha auditável do dashboard. A publicação cumulativa e agendada descrita abaixo é um fluxo **legado e opcional**.
 
 ---
 
-## Arquitetura
+## Arquitetura (automação opcional legada)
 
 ```
 Azure DevOps
@@ -57,7 +93,8 @@ Azure DevOps
 | Geração de resumo | `src/summarize.py` | LLM local via Ollama (fallback: template) |
 | Publicação cumulativa | `src/publish.py` | Markdown por equipa + audit log |
 | Regras obrigatórias de report | `src/report_guidelines.py` | Validação automática das guidelines antes de publicar |
-| Orquestrador | `src/run_report.py` | CLI principal |
+| Orquestrador legado | `src/run_report.py` | Pipeline automático que publica |
+| Passos locais | `src/report_cli.py` | Recolha, rascunho, validação e publicação explícita |
 | Automação | `.github/workflows/sprint-report.yml` | Agendamento GitHub Actions |
 
 ---
@@ -166,7 +203,7 @@ No repositório GitHub → **Settings → Secrets and variables → Actions**, c
 
 ---
 
-## Como executar
+## Como executar a automação opcional (publica imediatamente)
 
 ### Execução manual (todas as equipas)
 

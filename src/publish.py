@@ -50,7 +50,7 @@ def publish_report(
     if not report_path.exists():
         header = (
             f"# Relatório de Sprint – {team['name']}\n\n"
-            f"> Gerado automaticamente a cada 2 semanas.\n\n"
+            f"> Histórico cumulativo dos reports de sprint.\n\n"
             f"---\n\n"
         )
         report_path.write_text(header, encoding="utf-8")

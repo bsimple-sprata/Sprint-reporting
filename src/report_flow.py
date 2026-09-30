@@ -11,10 +11,15 @@ import yaml
 
 from publish import publish_report
 from report_guidelines import build_report_section, validate_report_markdown
-from snapshot import capture_dashboard_snapshot
+from snapshot import collect_dashboard_widgets
 from summarize import fetch_ado_metrics
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def ensure_not_published_output(path: Path) -> None:
+    if path.resolve().is_relative_to((ROOT / "reports").resolve()):
+        raise ValueError("Usa uma pasta fora de reports/ para recolhas e rascunhos.")
 
 
 def load_config(path: Path) -> dict:
@@ -47,7 +52,13 @@ def project_for_team(config: dict, team: dict) -> str:
 
 def collect(config: dict, team_name: str, sprint: str, output: Path,
             pat: str, snapshot: bool = False) -> dict:
+    ensure_not_published_output(output)
+    if not pat:
+        raise ValueError("Define ADO_PAT no ambiente para recolher dados.")
     team = resolve_team(config, team_name)
+    url = urlsplit(team["dashboard_url"])
+    if url.username or url.password or url.query or url.fragment:
+        raise ValueError("A URL do dashboard não deve conter credenciais nem parâmetros.")
     project = project_for_team(config, team)
     metrics = fetch_ado_metrics(team, pat, project)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -58,6 +69,7 @@ def collect(config: dict, team_name: str, sprint: str, output: Path,
         "captured_at": now,
         "dashboard_url": team["dashboard_url"],
         "metrics": {},
+        "widgets": [],
         "warnings": [],
         "snapshot": None,
     }
@@ -70,9 +82,13 @@ def collect(config: dict, team_name: str, sprint: str, output: Path,
         }
     else:
         data["warnings"].append("Total de work items indisponível; não inferir métricas a partir da imagem.")
-    if snapshot:
-        image = capture_dashboard_snapshot(team, str(output.parent / "snapshots"), pat)
-        data["snapshot"] = str(Path(image).resolve())
+    widgets, image = collect_dashboard_widgets(
+        team, pat, str(output.parent / "snapshots") if snapshot else None
+    )
+    data["widgets"] = widgets
+    data["snapshot"] = image
+    if not widgets:
+        data["warnings"].append("Nenhum widget de dashboard identificável; verificar autenticação e seletores.")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return data
@@ -82,10 +98,11 @@ def read_collection(path: Path) -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or data.get("kind") != "collection":
         raise ValueError("Ficheiro de recolha inválido.")
-    for key in ("team", "sprint", "captured_at", "metrics"):
-        if not data.get(key):
-            if key != "metrics" or not isinstance(data.get(key), dict):
-                raise ValueError(f"Ficheiro de recolha sem '{key}'.")
+    for key in ("team", "sprint", "captured_at"):
+        if not isinstance(data.get(key), str) or not data[key].strip():
+            raise ValueError(f"Ficheiro de recolha sem '{key}'.")
+    if not isinstance(data.get("metrics"), dict):
+        raise ValueError("Ficheiro de recolha sem 'metrics'.")
     return data
 
 
@@ -129,15 +146,22 @@ def validate_draft(markdown: str, data: dict, report_path: Path) -> None:
     if f"**Capturado em:** {data['captured_at']}" not in markdown:
         raise ValueError("A data de recolha não corresponde aos dados.")
     validate_report_markdown(markdown, report_path, require_snapshot=False)
+    if markdown.count("## Sprint ") != 1 or markdown.count("### Resumo Executivo") != 1:
+        raise ValueError("O rascunho deve conter uma única secção de sprint e resumo.")
     summary = markdown.split("### Resumo Executivo\n", 1)[1].split("\n---", 1)[0].strip()
     if not summary:
         raise ValueError("Resumo Executivo vazio.")
+    if not markdown.rstrip().endswith("---"):
+        raise ValueError("Estrutura do rascunho inválida após o resumo.")
+    allowed = set(re.findall(r"\d+(?:[.,]\d+)?%?", data["sprint"] + " " + data["captured_at"]))
+    allowed.update(str(metric.get("value")) for metric in data["metrics"].values()
+                   if isinstance(metric, dict) and type(metric.get("value")) is int)
+    for widget in data.get("widgets", []):
+        if isinstance(widget, dict) and isinstance(widget.get("text"), str):
+            allowed.update(re.findall(r"\d+(?:[.,]\d+)?%?", widget["text"]))
     for match in re.findall(r"(?<![\w])\d+(?:[.,]\d+)?%?", summary):
-        if match not in (data["sprint"] + " " + data["captured_at"]):
-            values = [str(metric.get("value")) for metric in data["metrics"].values()
-                      if isinstance(metric, dict)]
-            if match not in values:
-                raise ValueError(f"Número sem evidência no resumo: {match}.")
+        if match not in allowed:
+            raise ValueError(f"Número sem evidência no resumo: {match}.")
 
 
 def publish_draft(data: dict, draft_path: Path, config: dict, pat_confirmed: bool) -> str:
@@ -149,8 +173,12 @@ def publish_draft(data: dict, draft_path: Path, config: dict, pat_confirmed: boo
     if not source or not Path(source).is_file():
         raise ValueError("Publicação exige snapshot existente na recolha.")
     team = resolve_team(config, data["team"])
-    output_dir = ROOT / team["publish_to"]
+    output_dir = (ROOT / team["publish_to"]).resolve()
+    if not output_dir.is_relative_to((ROOT / "reports").resolve()):
+        raise ValueError("Destino de publicação fora de reports/.")
     dest = output_dir / "snapshots" / Path(source).name
+    if dest.exists() and dest.resolve() != Path(source).resolve():
+        raise ValueError("Snapshot já existe no destino; usa uma nova recolha.")
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, dest)
     summary = draft.split("### Resumo Executivo\n", 1)[1].split("\n---", 1)[0].strip()
