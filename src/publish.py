@@ -25,6 +25,7 @@ def publish_report(
     snapshot_path: str,
     output_dir: str,
     sprint_label: str,
+    captured_at: str | None = None,
 ) -> str:
     """
     Adiciona (de forma cumulativa) uma nova secção ao relatório Markdown da equipa.
@@ -50,13 +51,13 @@ def publish_report(
     if not report_path.exists():
         header = (
             f"# Relatório de Sprint – {team['name']}\n\n"
-            f"> Gerado automaticamente a cada 2 semanas.\n\n"
+            f"> Histórico cumulativo dos reports de sprint.\n\n"
             f"---\n\n"
         )
         report_path.write_text(header, encoding="utf-8")
 
     rel_image = normalize_snapshot_markdown_path(snapshot_path, report_dir)
-    new_section = build_report_section(team["name"], sprint_label, now, summary, rel_image)
+    new_section = build_report_section(team["name"], sprint_label, captured_at or now, summary, rel_image)
 
     current_content = report_path.read_text(encoding="utf-8")
     updated_content = f"{current_content}{new_section}"

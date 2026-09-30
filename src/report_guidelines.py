@@ -60,7 +60,9 @@ def normalize_snapshot_markdown_path(snapshot_path: str, report_dir: Path) -> st
     return Path(rel).as_posix()
 
 
-def validate_report_markdown(report_markdown: str, report_path: Path) -> None:
+def validate_report_markdown(
+    report_markdown: str, report_path: Path, require_snapshot: bool = True
+) -> None:
     sections = _load_guidelines_sections()
     required_items = sections.get("estrutura obrigatória do report", [])
     if not required_items:
@@ -76,7 +78,7 @@ def validate_report_markdown(report_markdown: str, report_path: Path) -> None:
         errors.append("Estrutura obrigatória inválida: secção '## Sprint <label>' em falta.")
 
     image_paths = [path.strip() for path in IMAGE_LINK_RE.findall(report_markdown)]
-    if "imagem" in required_text and not image_paths:
+    if require_snapshot and "imagem" in required_text and not image_paths:
         errors.append("Estrutura obrigatória inválida: imagem do dashboard em falta.")
 
     if "resumo" in required_text and "### Resumo Executivo" not in report_markdown:
